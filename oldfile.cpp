@@ -6,6 +6,7 @@
 #include <mutex>
 #include <queue>
 #include <sstream>
+#include <vector>
 
 using namespace std;
 
@@ -16,13 +17,12 @@ mutex mtx;
 pthread_mutex_t posix_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 int get_tid(int id) {
-  // 1 to 3+N thread ID
   static thread_local shared_ptr<int> tid(new int);
   if (id > 0) *tid = id;
   return *tid;
 }
 
-void *producer_routine(void *arg) {
+void* producer_routine(void* arg) {
   (void)arg;
   get_tid(2);
 
@@ -43,51 +43,57 @@ void *producer_routine(void *arg) {
   return nullptr;
 }
 
-void *consumer_routine(void *arg) {
+void* consumer_routine(void* arg) {
   get_tid(3);
 
-  int *sleep_limit = static_cast<int *>(arg);
+  int* sleep_limit = static_cast<int*>(arg);
   int sum = 0;
+
+  pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, nullptr);
+  pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, nullptr);
 
   while (true) {
     int value;
 
-    lock_guard<mutex> lock(mtx);
-    if (!buffer.empty()) {
-      value = buffer.front();
-      buffer.pop();
-    } else {
-      if (finished) {
-        break;
+    {
+      lock_guard<mutex> lock(mtx);
+      if (!buffer.empty()) {
+        value = buffer.front();
+        buffer.pop();
+      } else {
+        if (finished && buffer.empty()) {
+          break;
+        }
+        continue;
       }
-      continue;
     }
 
     sum += value;
+
+    pthread_testcancel();
 
     if (*sleep_limit > 0) {
       usleep((rand() % (*sleep_limit + 1)));
     }
   }
 
-  return (void *)(size_t)sum;
+  return (void*)(size_t)sum;
 }
 
-void *consumer_interrupter_routine(void *arg) {
-  (void)arg;
+void* consumer_interrupter_routine(void* arg) {
+  vector<pthread_t>* consumer_threads = static_cast<vector<pthread_t>*>(arg);
   get_tid(4);
 
   while (!finished) {
     usleep(100000);
 
-    pthread_mutex_lock(&posix_mtx);
-    if (!buffer.empty()) {
-      cout << "Interruptor is trying to interrupt the consumer..." << endl;
+    int random_index = rand() % consumer_threads->size();
+
+    if (pthread_cancel((*consumer_threads)[random_index]) == 0) {
+      cout << "Interruptor cancelled consumer " << random_index + 1 << endl;
     }
-    pthread_mutex_unlock(&posix_mtx);
   }
 
-  // cout << "Interruptor thread finished." << endl;
   return nullptr;
 }
 
@@ -102,21 +108,25 @@ void run_threads(int consumer_count, int sleep_limit) {
 
   for (int i = 0; i < consumer_count; ++i) {
     pthread_create(&consumer_threads[i], nullptr, consumer_routine,
-                   (void *)&sleep_limit);
+                   (void*)&sleep_limit);
   }
 
   pthread_create(&interruptor_thread, nullptr, consumer_interrupter_routine,
-                 nullptr);
+                 (void*)&consumer_threads);
 
   int total_sum = 0;
-  for (auto &consumer_thread : consumer_threads) {
-    void *result;
+
+  for (auto& consumer_thread : consumer_threads) {
+    void* result;
     pthread_join(consumer_thread, &result);
-    total_sum += (size_t)result;
+    if (result != PTHREAD_CANCELED) {
+      total_sum += (size_t)result;
+    } else {
+      cout << "Consumer thread was cancelled." << endl;
+    }
   }
 
   pthread_join(producer_thread, nullptr);
-
   pthread_join(interruptor_thread, nullptr);
 
   cout << total_sum << endl;

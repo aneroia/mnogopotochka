@@ -82,13 +82,16 @@ void *consumer_interrupter_routine(void *arg) {
     get_tid(4);  // Присваиваем идентификатор для потока interrupter
 
     while (!finished) {
-        usleep(100000);  // Ждем 100 мс перед попыткой прерывания
+        usleep(10000);  // Уменьшили время ожидания до 10 мс
 
         // Выбираем случайный поток consumer
         int random_index = rand() % consumer_threads->size();
 
-        // Прерываем выбранный поток consumer
-        pthread_cancel((*consumer_threads)[random_index]);
+        // Проверяем, что поток все еще активен, прежде чем пытаться его прервать
+        if (pthread_kill((*consumer_threads)[random_index], 0) == 0) {
+            // Прерываем выбранный поток consumer
+            pthread_cancel((*consumer_threads)[random_index]);
+        }
     }
 
     return nullptr;

@@ -15,7 +15,7 @@ atomic<bool> data_ready(false);
 atomic<bool> finished(false);
 mutex mtx;
 static pthread_mutex_t tid_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int *thread_id = nullptr;
+static int* thread_id = nullptr;
 vector<pthread_t> consumer_threads;
 
 int get_tid() {
@@ -28,7 +28,7 @@ int get_tid() {
   return *thread_id;
 }
 
-void *producer_routine(void *arg) {
+void* producer_routine(void* arg) {
   (void)arg;
   get_tid();
 
@@ -49,10 +49,10 @@ void *producer_routine(void *arg) {
   return nullptr;
 }
 
-void *consumer_routine(void *arg) {
+void* consumer_routine(void* arg) {
   get_tid();
 
-  int *sleep_limit = static_cast<int *>(arg);
+  int* sleep_limit = static_cast<int*>(arg);
   int sum = 0;
 
   while (true) {
@@ -78,10 +78,10 @@ void *consumer_routine(void *arg) {
     }
   }
 
-  return (void *)(size_t)sum;
+  return (void*)(size_t)sum;
 }
 
-void *consumer_interrupter_routine(void *arg) {
+void* consumer_interrupter_routine(void* arg) {
   (void)arg;
   get_tid();
 
@@ -110,15 +110,15 @@ void run_threads(int consumer_count, int sleep_limit) {
 
   for (int i = 0; i < consumer_count; ++i) {
     pthread_create(&consumer_threads[i], nullptr, consumer_routine,
-                   (void *)&sleep_limit);
+                   (void*)&sleep_limit);
   }
 
   pthread_create(&interruptor_thread, nullptr, consumer_interrupter_routine,
                  nullptr);
 
   int total_sum = 0;
-  for (auto &consumer_thread : consumer_threads) {
-    void *result;
+  for (auto& consumer_thread : consumer_threads) {
+    void* result;
     pthread_join(consumer_thread, &result);
     total_sum += (size_t)result;
   }
